@@ -4,6 +4,7 @@ require('dotenv').config()
 const mongoose = require("mongoose");
 const multer = require("multer")
 const app = express();
+const fs = require("fs"); 
 
 
 mongoose.connect(process.env.DB_URI)
@@ -26,6 +27,14 @@ app.get('/', function (req, res) {
 // The form file input field has the name attribute set to upfile.
 // When you submit a file, you receive the file name, type, and size in bytes within the JSON response.
 
+const imageSchema = new mongoose.Schema({
+  filename: String,
+  contentType: String,
+  data: Buffer
+})
+
+const Image = mongoose.model("Image", imageSchema)
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb){
     cb(null, "uploads/");
@@ -37,9 +46,26 @@ const storage = multer.diskStorage({
 
 const upload = multer({storage: storage});
 
-app.post("/api/fileanalyse", upload.single("upfile"), (req, res) => {
+app.post("/api/fileanalyse", upload.single("upfile"), async (req, res) => {
   const uploadedFile = req.file;
   console.log(uploadedFile);
+
+  const newImage = new Image({
+    filename: uploadedFile.originalname,
+    contentType: uploadedFile.mimetype,
+    size: uploadedFile.size,
+    data: fs.readFileSync(uploadedFile.path)
+  })
+
+  try{
+    await newImage.save()
+  }
+  catch(err){
+    console.log("Error saving image to MongoDB:", err);
+    return res.status(500).send("Internal Server Error")
+  }
+
+  fs.unlinkSync(uploadedFile.path)
 
   res.json({
     name: uploadedFile.originalname,
@@ -48,8 +74,6 @@ app.post("/api/fileanalyse", upload.single("upfile"), (req, res) => {
   })
 
 })
-
-
 
 const port = process.env.PORT || 3000;
 app.listen(port, function () {
